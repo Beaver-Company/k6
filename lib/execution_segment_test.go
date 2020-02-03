@@ -403,11 +403,11 @@ func TestGetStripedOffsets(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(fmt.Sprintf("seq:%s;segment:%s", tc.seq, tc.seg), func(t *testing.T) {
-			result, err := NewExecutionSegmentSequenceFromString(tc.seq)
+			ess, err := NewExecutionSegmentSequenceFromString(tc.seq)
 			require.NoError(t, err)
 			segment, err := NewExecutionSegmentFromString(tc.seg)
 			require.NoError(t, err)
-			start, offsets, err := result.GetStripedOffsets(segment)
+			start, offsets, err := ess.GetStripedOffsets(segment)
 			if len(tc.expError) != 0 {
 				require.Error(t, err, tc.expError)
 				require.Contains(t, err.Error(), tc.expError)
@@ -417,6 +417,10 @@ func TestGetStripedOffsets(t *testing.T) {
 
 			assert.Equal(t, tc.start, start)
 			assert.Equal(t, tc.offsets, offsets)
+
+			ess2, err := NewExecutionSegmentSequenceFromString(tc.seq)
+			require.NoError(t, err)
+			assert.Equal(t, ess, ess2)
 		})
 	}
 }
