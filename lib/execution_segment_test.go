@@ -23,6 +23,7 @@ package lib
 import (
 	"fmt"
 	"math/big"
+	"math/rand"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -421,6 +422,81 @@ func TestGetStripedOffsets(t *testing.T) {
 			ess2, err := NewExecutionSegmentSequenceFromString(tc.seq)
 			require.NoError(t, err)
 			assert.Equal(t, ess, ess2)
+		})
+	}
+}
+
+func BenchmarkGetStripedOffsets(b *testing.B) {
+	var lengths = [...]int64{10, 100}
+	generateRandomSequence := func(n int64, r *rand.Rand) ExecutionSegmentSequence {
+		// try to randomly generate an executionsegmentsequence
+		var err error
+		var ess = ExecutionSegmentSequence(make([]*ExecutionSegment, n))
+		var numerators = make([]int64, n)
+		var denominator int64
+		for i := int64(0); i < n; i++ {
+			for numerators[i] == 0 {
+				numerators[i] = r.Int63n(n)
+				denominator += numerators[i]
+			}
+		}
+		ess[0], err = NewExecutionSegment(big.NewRat(0, 1), big.NewRat(numerators[0], denominator))
+		require.NoError(b, err)
+		for i := int64(1); i < n; i++ {
+			ess[i], err = NewExecutionSegment(ess[i-1].to, new(big.Rat).Add(big.NewRat(numerators[i], denominator), ess[i-1].to))
+			require.NoError(b, err, "%d", i)
+		}
+
+		return ess
+	}
+
+	const seed = 777
+	r := rand.New(rand.NewSource(seed))
+
+	for _, length := range lengths {
+		length := length
+		b.Run(fmt.Sprintf("length%d,seed%d", length, seed), func(b *testing.B) {
+			sequence := generateRandomSequence(length, r)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, _, err := sequence.GetStripedOffsets(sequence[int(r.Int63())%len(sequence)])
+				require.NoError(b, err)
+			}
+		})
+	}
+}
+
+func BenchmarkGetStripedOffsetsEven(b *testing.B) {
+	var lengths = [...]int64{10, 100, 1000}
+	generateSequence := func(n int64) ExecutionSegmentSequence {
+		// try to randomly generate an executionsegmentsequence
+		var err error
+		var ess = ExecutionSegmentSequence(make([]*ExecutionSegment, n))
+		var numerators = make([]int64, n)
+		var denominator int64
+		for i := int64(0); i < n; i++ {
+			numerators[i] = 1 // nice and simple :)
+			denominator += numerators[i]
+		}
+		ess[0], err = NewExecutionSegment(big.NewRat(0, 1), big.NewRat(numerators[0], denominator))
+		require.NoError(b, err)
+		for i := int64(1); i < n; i++ {
+			ess[i], err = NewExecutionSegment(ess[i-1].to, new(big.Rat).Add(big.NewRat(numerators[i], denominator), ess[i-1].to))
+			require.NoError(b, err, "%d", i)
+		}
+
+		return ess
+	}
+
+	for _, length := range lengths {
+		length := length
+		b.Run(fmt.Sprintf("length%d", length), func(b *testing.B) {
+			sequence := generateSequence(length)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, _, err := sequence.GetStripedOffsets(sequence[111233%len(sequence)])
+				require.NoError(b, err)
+			}
 		})
 	}
 }
